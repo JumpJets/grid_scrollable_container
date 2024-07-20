@@ -18,8 +18,8 @@ const component = (root, data, render_callback, options) => {
 		ggap = options?.gap ?? 10,
 		wpad = options?.padding ?? 10,
 
-		draggable = options?.draggable ?? false,
-		drop_ctx = draggable ? {
+		drop_ctx = {
+			draggable: options?.draggable ?? false,
 			placeholder: create_element("div", { classList: "drop-placeholder" }),
 			added: false,
 			origin: null,
@@ -27,7 +27,7 @@ const component = (root, data, render_callback, options) => {
 			at_start: true,
 			at_end: false,
 			drag_scroll_throttle: null
-		} : {};
+		};
 
 	scrollbar.appendChild(scrollbar_thumb);
 	content.appendChild(wrap);
@@ -56,7 +56,7 @@ const component = (root, data, render_callback, options) => {
 
 		const frag = document.createDocumentFragment();
 
-		if (draggable) data.slice(start, stop).forEach((el_data, idx) => frag.appendChild(apply_drag(render_callback(el_data, idx, data), start + idx)));
+		if (drop_ctx.draggable) data.slice(start, stop).forEach((el_data, idx) => frag.appendChild(apply_drag(render_callback(el_data, idx, data), start + idx)));
 		else data.slice(start, stop).forEach((el_data, idx) => frag.appendChild(render_callback(el_data, idx, data)));
 
 		if (clear) clear_wrap();
@@ -104,7 +104,7 @@ const component = (root, data, render_callback, options) => {
 
 		calc_scrollbar();
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	// ? mouse wheel scroll
@@ -131,7 +131,7 @@ const component = (root, data, render_callback, options) => {
 
 		calc_scrollbar();
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	// ? scrollbar mouse & touch
@@ -162,7 +162,7 @@ const component = (root, data, render_callback, options) => {
 
 		fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	const on_pointerup = (e) => {
@@ -218,7 +218,7 @@ const component = (root, data, render_callback, options) => {
 
 		fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	const on_touch_scroll_up = (e) => {
@@ -281,7 +281,7 @@ const component = (root, data, render_callback, options) => {
 
 		calc_scrollbar();
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	const on_drag_over = (e) => {
@@ -415,7 +415,7 @@ const component = (root, data, render_callback, options) => {
 	scrollbar.addEventListener("pointerdown", on_pointerdown, true);
 	wrap.addEventListener("pointerdown", on_touch_scroll_down, true);
 
-	if (draggable) {
+	if (drop_ctx.draggable) {
 		wrap.addEventListener("dragover", on_drag_over);
 		wrap.addEventListener("drop", on_drop);
 		drop_ctx.drag_scroll_throttle = throttle(drag_scroll, 400);

@@ -1,25 +1,35 @@
 import { array_move, create_element, throttle } from "./util";
 
-export type component_options = {
-	width?: number
-	height?: number
-	gap?: number
-	padding?: number
-	draggable?: boolean
+type PositiveNumber<N extends number = number> = number extends N ? N : `${N}` extends "0" | `-${string}` ? never : N;
+
+type NonnegativeNumber<N extends number = number> = number extends N ? N : `${N}` extends `-${string}` ? never : N;
+
+type PositiveInteger<N extends number = number> = number extends N ? N : `${N}` extends "0" | `-${string}` | `${string}.${string}` ? never : N;
+
+type NonnegativeInteger<N extends number = number> = number extends N ? N : `${N}` extends `-${string}` | `${string}.${string}` ? never : N;
+
+
+export type component_options<N extends number = number> = {
+	width?: NonnegativeNumber<N> // column width (if columns is used, then use fractional units instead)
+	height?: NonnegativeNumber<N> // row height
+	gap?: NonnegativeNumber<N> // gap between grid cells (px) to calculate proper sizes
+	padding?: NonnegativeNumber<N> // padding for container (px) to calculate proper sizes
+	draggable?: boolean | "single" | "multiple" // support dragging grid cells, when table is used - drag rows
 }
 
-type drop_ctx_type = {
+export type drop_ctx_type<N extends number = number> = {
+	draggable: boolean | "single" | "multiple"
 	placeholder: HTMLElement
 	added: boolean
 	origin: HTMLElement | null // | EventTarget
 	origin_pos: {
-		ncols: number
-		nrows: number
-		row: number
+		ncols: PositiveInteger<N>
+		nrows: PositiveInteger<N>
+		row: NonnegativeInteger<N>
 	}
 	at_start: boolean
 	at_end: boolean
-	drag_scroll_throttle: (direction: boolean) => void | null
+	drag_scroll_throttle: ((direction: boolean) => void) | null
 }
 
 
@@ -30,7 +40,7 @@ type drop_ctx_type = {
 	* options - an object with sizes styles {width: 200, height: 100, gap: 10, padding: 10} for correct size calculations, as well as enable drag-and-drop support {draggable: true}
 	? returns { reflow } - a method for updating dynamic data (e.g. for infinite scrolling)
 */
-const component = (root: HTMLElement, data: any[], render_callback: Function, options: component_options): { reflow: () => void } => {
+const component = <N extends number = number>(root: HTMLElement, data: any[], render_callback: Function, options: component_options<N>): { reflow: () => void } => {
 	const content = create_element("div", { classList: "content" }),
 		wrap = create_element("div", { classList: "wrap" }),
 		scrollbar = create_element("div", { classList: "scrollbar" }),
@@ -41,16 +51,16 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 		ggap = options?.gap ?? 10,
 		wpad = options?.padding ?? 10,
 
-		draggable = options?.draggable ?? false,
-		drop_ctx: drop_ctx_type = draggable ? {
+		drop_ctx: drop_ctx_type = {
+			draggable: options?.draggable ?? false,
 			placeholder: create_element("div", { classList: "drop-placeholder" }),
 			added: false,
 			origin: null,
-			origin_pos: { ncols: 0, nrows: 0, row: 0 },
+			origin_pos: { ncols: 1, nrows: 1, row: 0 },
 			at_start: true,
 			at_end: false,
 			drag_scroll_throttle: null
-		} : {} as any;
+		};
 
 	scrollbar.appendChild(scrollbar_thumb);
 	content.appendChild(wrap);
@@ -61,11 +71,11 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 	let wwidth: number = wrap.clientWidth - wpad * 2,
 		ncols: number = Math.max(Math.floor((wwidth + ggap) / (gwidth + ggap)), 1),
 		_nrows: number = (window.innerHeight - ggap) / (gheight + ggap),
-		nrows: number = Math.ceil(_nrows),
-		row: number = 0,
-		total: number = data.length,
-		max_row: number = Math.ceil(total / ncols - _nrows),
-		thumb_height: number = 0;
+		nrows: PositiveInteger = Math.ceil(_nrows),
+		row: NonnegativeInteger = 0,
+		total: NonnegativeInteger = data.length,
+		max_row: PositiveInteger = Math.ceil(total / ncols - _nrows),
+		thumb_height: NonnegativeInteger = 0;
 
 	// ? container filler methods
 
@@ -73,13 +83,13 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 		while (wrap.firstChild) wrap.lastChild?.remove();
 	};
 
-	const fill_wrap = (start: number, stop: number, clear: boolean = false, at_start: boolean = false): void => {
+	const fill_wrap = (start: NonnegativeInteger, stop: NonnegativeInteger, clear: boolean = false, at_start: boolean = false): void => {
 		if (start < 0) start = 0;
 		if (stop > total) stop = total;
 
 		const frag = document.createDocumentFragment();
 
-		if (draggable) data.slice(start, stop).forEach((el_data, idx) => frag.appendChild(apply_drag(render_callback(el_data, idx, data), start + idx)));
+		if (drop_ctx.draggable) data.slice(start, stop).forEach((el_data, idx) => frag.appendChild(apply_drag(render_callback(el_data, idx, data), start + idx)));
 		else data.slice(start, stop).forEach((el_data, idx) => frag.appendChild(render_callback(el_data, idx, data)));
 
 		if (clear) clear_wrap();
@@ -87,7 +97,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 		else wrap.appendChild(frag);
 	};
 
-	const calc_scrollbar_thumb_height = (els: number): number =>
+	const calc_scrollbar_thumb_height = (els: NonnegativeInteger): NonnegativeInteger =>
 		thumb_height = Math.max(4, Math.min(els / total * 100, 100));
 
 	const calc_scrollbar = (_e?: Event): void => {
@@ -127,7 +137,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 
 		calc_scrollbar();
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	// ? mouse wheel scroll
@@ -154,7 +164,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 
 		calc_scrollbar();
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	// ? scrollbar mouse & touch
@@ -185,7 +195,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 
 		fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	const on_pointerup = (e: PointerEvent): void => {
@@ -241,7 +251,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 
 		fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	const on_touch_scroll_up = (e: PointerEvent): void => {
@@ -304,7 +314,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 
 		calc_scrollbar();
 
-		if (draggable) drop_scroll_update();
+		if (drop_ctx.draggable) drop_scroll_update();
 	};
 
 	const on_drag_over = (e: DragEvent): void => {
@@ -361,7 +371,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 		if (!is_same_idx) drop_fix_indexes(drag_idx, drop_idx);
 	};
 
-	const apply_drag = (el: HTMLElement, index: number): HTMLElement => {
+	const apply_drag = (el: HTMLElement, index: NonnegativeInteger): HTMLElement => {
 		el.draggable = true;
 		el.dataset.dataid = index as any;
 		el.addEventListener("dragstart", on_drag_start);
@@ -382,9 +392,9 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 		}
 	};
 
-	const drop_fix_indexes = (drag_idx: number, drop_idx: number): void => {
-		const idx_min = Math.min(drag_idx, drop_idx),
-			idx_max = Math.max(drag_idx, drop_idx),
+	const drop_fix_indexes = (drag_idx: NonnegativeInteger, drop_idx: NonnegativeInteger): void => {
+		const idx_min: NonnegativeInteger = Math.min(drag_idx, drop_idx),
+			idx_max: NonnegativeInteger = Math.max(drag_idx, drop_idx),
 			slice = [...(wrap.children as any)].filter((el: any): boolean => (+el.dataset.dataid >= idx_min) && (+el.dataset.dataid <= idx_max)) as HTMLElement[];
 		let idx = idx_min;
 
@@ -438,7 +448,7 @@ const component = (root: HTMLElement, data: any[], render_callback: Function, op
 	scrollbar.addEventListener("pointerdown", on_pointerdown, true);
 	wrap.addEventListener("pointerdown", on_touch_scroll_down, true);
 
-	if (draggable) {
+	if (drop_ctx.draggable) {
 		wrap.addEventListener("dragover", on_drag_over);
 		wrap.addEventListener("drop", on_drop);
 		drop_ctx.drag_scroll_throttle = throttle(drag_scroll, 400);
