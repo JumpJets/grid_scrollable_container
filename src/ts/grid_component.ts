@@ -10,11 +10,15 @@ type NonnegativeInteger<N extends number = number> = number extends N ? N : `${N
 
 
 export type component_options<N extends number = number> = {
-	width?: NonnegativeNumber<N> // column width (if columns is used, then use fractional units instead)
-	height?: NonnegativeNumber<N> // row height
+	width?: NonnegativeNumber<N> // column width (px, if "columns" is used, then use fractional units instead (fr))
+	height?: NonnegativeNumber<N> // row height (px)
+	columns?: PositiveInteger<N> // used to specify fixed amount of columns, instead calculate from width
 	gap?: NonnegativeNumber<N> // gap between grid cells (px) to calculate proper sizes
 	padding?: NonnegativeNumber<N> // padding for container (px) to calculate proper sizes
-	draggable?: boolean | "single" | "multiple" // support dragging grid cells, when table is used - drag rows
+	table?: boolean // work with grid as with table, use "columns" and data should be expected as 2-dimensional array or array of objects
+	table_headers?: string[] // table headers
+	table_headers_height?: NonnegativeNumber<N> // optionable table headers height (use row height if not set)
+	draggable?: boolean | "single" | "multiple" // enable drag-and-drop support, by default dragging grid cells, when table is used - drag rows
 }
 
 export type drop_ctx_type<N extends number = number> = {
@@ -32,24 +36,42 @@ export type drop_ctx_type<N extends number = number> = {
 	drag_scroll_throttle: ((direction: boolean) => void) | null
 }
 
+export type component_return<N extends number> = {
+	reflow: () => void
+	set_columns: (value: PositiveInteger<N>) => boolean
+}
 
-/* component for grid container
+
+/* # component for grid container
 	* root - target Element
 	* data - data array for render callback (any)
 	* render_callback - render function, should accept data from elements and return Element
-	* options - an object with sizes styles {width: 200, height: 100, gap: 10, padding: 10} for correct size calculations, as well as enable drag-and-drop support {draggable: true}
+	* options - an object with following options:
+		* width: number, positive number, default 200 - column width (px, if "columns" is used, then use fractional units instead (fr))
+		* height: number, positive number, default 100 - row height (px)
+		* columns: number | null, positive integer, default null - used to specify fixed amount of columns, instead calculate from width
+		* gap: number, positive number, default 10 - gap between grid cells (px) to calculate proper sizes
+		* padding: number, non-negative number, default 10 - padding for container (px) to calculate proper sizes
+		* table: boolean, default false - work with grid as with table, use "columns" and data should be expected as 2-dimensional array or array of objects
+		* table_headers: string[], default [] - table headers
+		* table_headers_height: number, non-negative number - optionable table headers height (use row height if not set)
+		* draggable: boolean | "single" | "multiple", default false - enable drag-and-drop support, by default dragging grid cells, when table is used - drag rows
 	? returns { reflow } - a method for updating dynamic data (e.g. for infinite scrolling)
 */
-const component = <N extends number = number>(root: HTMLElement, data: any[], render_callback: Function, options: component_options<N>): { reflow: () => void } => {
+const component = <N extends number = number>(root: HTMLElement, data: any[], render_callback: Function, options: component_options<N>): component_return<N> => {
 	const content = create_element("div", { classList: "content" }),
 		wrap = create_element("div", { classList: "wrap" }),
 		scrollbar = create_element("div", { classList: "scrollbar" }),
 		scrollbar_thumb = create_element("div", { classList: "scrollbar-thumb" }),
 
-		gwidth = options?.width ?? 200,
-		gheight = options?.height ?? 100,
-		ggap = options?.gap ?? 10,
-		wpad = options?.padding ?? 10,
+		column_width = options?.width ?? 200,
+		row_height = options?.height ?? 100,
+		grid_gap = options?.gap ?? 10,
+		wrap_padding = options?.padding ?? 10,
+
+		table = options?.table ?? false,
+		table_headers = options?.table_headers ?? [],
+		table_headers_height = options?.table_headers_height ?? row_height,
 
 		drop_ctx: drop_ctx_type = {
 			draggable: options?.draggable ?? false,
@@ -68,13 +90,14 @@ const component = <N extends number = number>(root: HTMLElement, data: any[], re
 
 	root.appendChild(content);
 
-	let wwidth: number = wrap.clientWidth - wpad * 2,
-		ncols: number = Math.max(Math.floor((wwidth + ggap) / (gwidth + ggap)), 1),
-		_nrows: number = (window.innerHeight - ggap) / (gheight + ggap),
-		nrows: PositiveInteger = Math.ceil(_nrows),
+	let wrap_width: number = wrap.clientWidth - wrap_padding * 2,
+		columns = options?.columns ?? null,
+		ncols: PositiveInteger = columns || Math.max(Math.floor((wrap_width + grid_gap) / (column_width + grid_gap)), 1),
+		nrows_fract: number = (window.innerHeight - grid_gap) / (row_height + grid_gap),
+		nrows: PositiveInteger = Math.ceil(nrows_fract),
 		row: NonnegativeInteger = 0,
 		total: NonnegativeInteger = data.length,
-		max_row: PositiveInteger = Math.ceil(total / ncols - _nrows),
+		max_row: PositiveInteger = Math.ceil(total / ncols - nrows_fract),
 		thumb_height: NonnegativeInteger = 0;
 
 	// ? container filler methods
@@ -116,11 +139,11 @@ const component = <N extends number = number>(root: HTMLElement, data: any[], re
 		const oldcols = ncols,
 			oldrows = nrows;
 
-		wwidth = wrap.clientWidth - wpad * 2;
-		ncols = Math.floor((wwidth + ggap) / (gwidth + ggap));
-		_nrows = (window.innerHeight - ggap) / (gheight + ggap);
-		nrows = Math.ceil(_nrows);
-		max_row = Math.ceil(total / ncols - _nrows);
+		wrap_width = wrap.clientWidth - wrap_padding * 2;
+		ncols = columns || Math.floor((wrap_width + grid_gap) / (column_width + grid_gap));
+		nrows_fract = (window.innerHeight - grid_gap) / (row_height + grid_gap);
+		nrows = Math.ceil(nrows_fract);
+		max_row = Math.ceil(total / ncols - nrows_fract);
 
 		if (oldcols === ncols && oldrows === nrows) return;
 
@@ -430,12 +453,34 @@ const component = <N extends number = number>(root: HTMLElement, data: any[], re
 		}
 	};
 
-	// ? reflow
+	// ? return methods
 
 	const reflow = (): void => {
 		total = data.length;
-		max_row = Math.ceil(total / ncols - _nrows);
+		max_row = Math.ceil(total / ncols - nrows_fract);
 		fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
+	};
+
+	const set_columns = (value: PositiveInteger<N> | null): boolean => {
+		const current_columns = columns;
+		columns = value;
+
+		if (!columns && current_columns) {
+			const current_ncols = ncols;
+			ncols = Math.max(Math.floor((wrap_width + grid_gap) / (column_width + grid_gap)), 1);
+			max_row = Math.ceil(total / ncols - nrows_fract);
+
+			if (current_ncols != ncols) {
+				fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
+				return true;
+			}
+			return false;
+		} else if (columns && current_columns != ncols) {
+			ncols = columns;
+			fill_wrap(ncols * row, ncols * row + nrows * ncols, true);
+			return true;
+		}
+		return false;
 	};
 
 	// ? init component
@@ -454,7 +499,7 @@ const component = <N extends number = number>(root: HTMLElement, data: any[], re
 		drop_ctx.drag_scroll_throttle = throttle(drag_scroll, 400);
 	}
 
-	return { reflow };
+	return { reflow, set_columns };
 };
 
 export default component;

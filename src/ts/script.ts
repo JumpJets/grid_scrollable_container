@@ -18,9 +18,19 @@ const render_item_callback = (el_data: string, idx: number, data_arr: string[]):
 // ? Your data for items
 const my_data: string[] = array_range(1, 10000, 1).map(i => `Element ${i}`),
 	// ? Item sizes (should be same as in CSS styles)
-	options: component_options = { width: 200, height: 100, gap: 10, padding: 10, draggable: true };
+	options: component_options = { width: 200, height: 100, gap: 10, padding: 10 };
 
+// ? Standard example
 component(document.body, my_data, render_item_callback, options);
+
+// ? Enable drag-and-drop
+// options.draggable = true;
+// component(document.body, my_data, render_item_callback, options);
+
+// ? Using fixed columns (NOTE: uncomment CSS rule for columns)
+// options.width = undefined;
+// options.columns = 1;
+// component(document.body, my_data, render_item_callback, options);
 
 // ? Dynamic example using reflow() return method
 // const { reflow } = component(document.body, data, render_item_callback, options);
